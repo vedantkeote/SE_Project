@@ -1,0 +1,13 @@
+{
+    "users": [
+        {
+            "user_id": "318651665",
+            "name": "Vedant Keote",
+            "email": "vedantkeote@gmail.com",
+            "role": "admin",
+            "password": "pasword123"
+        }
+    ],
+    "outpasses": [],
+    "notifications": []
+}

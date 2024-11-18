@@ -1,105 +1,99 @@
+import tkinter as tk
+from tkinter import messagebox
+import json
 from user import User
 from outpass import Outpass
-from notification import Notification
 
-# Sample Data
-users = [
-    User("1", "Alice", "alice@example.com", "student"),
-    User("2", "Bob", "bob@example.com", "staff"),
-    User("3", "Charlie", "charlie@example.com", "admin")
-]
+# Helper Functions
+def load_users():
+    with open('database.json') as file:
+        data = json.load(file)
+        return data['users']
 
-outpasses = []
-notifications = []
-
-# User Login
 def login():
-    user_id = input("Enter User ID: ")
-    password = input("Enter Password: ")
+    user_id = entry_user_id.get()
+    password = entry_password.get()
+    users = load_users()
 
     for user in users:
-        if user.authenticate(user_id, password):
-            print(f"Login successful! Welcome {user.get_name()}")
-            if user.get_role() == "student":
-                student_menu(user)
-            elif user.get_role() == "staff":
-                staff_menu(user)
-            elif user.get_role() == "admin":
-                admin_menu()
+        if user['user_id'] == user_id and user['password'] == password:
+            messagebox.showinfo("Login Success", f"Welcome, {user['name']}!")
+            if user['role'] == "student":
+                student_window(user)
+            elif user['role'] == "staff":
+                messagebox.showinfo("Info", "Staff functionalities are under development.")
+            elif user['role'] == "admin":
+                messagebox.showinfo("Info", "Admin functionalities are under development.")
             return
 
-    print("Invalid credentials. Try again.")
-    login()
+    messagebox.showerror("Error", "Invalid User ID or Password.")
 
-# Student Menu
-def student_menu(user):
-    while True:
-        print("\n1. Apply for Outpass\n2. View Notifications\n3. Logout")
-        choice = input("Choose an option: ")
+def register():
+    user_id = entry_user_id.get()
+    name = entry_name.get()
+    email = entry_email.get()
+    password = entry_password.get()
+    role = var_role.get()
 
-        if choice == "1":
-            apply_outpass(user)
-        elif choice == "2":
-            view_notifications(user)
-        elif choice == "3":
-            print("Logging out...")
-            break
-        else:
-            print("Invalid option. Please try again.")
+    User.register(user_id, name, email, role, password)
+    messagebox.showinfo("Registration Success", "You have registered successfully!")
 
-# Apply for Outpass
-def apply_outpass(user):
-    date = input("Enter Date (YYYY-MM-DD): ")
-    time = input("Enter Time (HH:MM): ")
-    reason = input("Enter Reason: ")
+def student_window(user):
+    def apply_outpass():
+        date = entry_date.get()
+        time = entry_time.get()
+        reason = entry_reason.get()
 
-    outpass = Outpass(user.get_name(), date, time, reason)
-    outpasses.append(outpass)
-    print("Outpass request submitted.")
+        outpass = Outpass(user['user_id'], date, time, reason)
+        outpass.save_outpass()
+        messagebox.showinfo("Success", "Outpass request submitted!")
 
-# Staff Menu
-def staff_menu(user):
-    while True:
-        print("\n1. Approve/Reject Outpasses\n2. Logout")
-        choice = input("Choose an option: ")
+    student_root = tk.Toplevel(root)
+    student_root.title("Student Dashboard")
 
-        if choice == "1":
-            approve_reject_outpass()
-        elif choice == "2":
-            print("Logging out...")
-            break
-        else:
-            print("Invalid option. Please try again.")
+    tk.Label(student_root, text="Apply for Outpass").pack()
+    tk.Label(student_root, text="Date (YYYY-MM-DD):").pack()
+    entry_date = tk.Entry(student_root)
+    entry_date.pack()
 
-# Approve/Reject Outpasses
-def approve_reject_outpass():
-    for outpass in outpasses:
-        if outpass.status == "pending":
-            outpass.display()
-            decision = input("Approve (yes/no)? ")
-            status = "approved" if decision.lower() == "yes" else "rejected"
-            outpass.update_status(status)
-            notifications.append(Notification(f"Your outpass has been {status}", outpass.student_id))
-            print(f"Outpass {outpass.outpass_id} has been {status}.")
+    tk.Label(student_root, text="Time (HH:MM):").pack()
+    entry_time = tk.Entry(student_root)
+    entry_time.pack()
 
-# Admin Menu
-def admin_menu():
-    generate_reports()
+    tk.Label(student_root, text="Reason:").pack()
+    entry_reason = tk.Entry(student_root)
+    entry_reason.pack()
 
-# Generate Reports
-def generate_reports():
-    print("\nOutpass Report:")
-    for outpass in outpasses:
-        outpass.display()
+    tk.Button(student_root, text="Submit Request", command=apply_outpass).pack()
 
-# View Notifications
-def view_notifications(user):
-    print("\nNotifications:")
-    for notification in notifications:
-        if notification.recipient_id == user.get_name():
-            notification.display()
+# GUI Setup
+root = tk.Tk()
+root.title("Outpass Management System")
 
-# Main Function
-if __name__ == "__main__":
-    print("Welcome to the Outpass Management System!")
-    login()
+var_role = tk.StringVar(value="student")
+
+tk.Label(root, text="User ID:").pack()
+entry_user_id = tk.Entry(root)
+entry_user_id.pack()
+
+tk.Label(root, text="Name (For Registration):").pack()
+entry_name = tk.Entry(root)
+entry_name.pack()
+
+tk.Label(root, text="Email:").pack()
+entry_email = tk.Entry(root)
+entry_email.pack()
+
+tk.Label(root, text="Password:").pack()
+entry_password = tk.Entry(root, show='*')
+entry_password.pack()
+
+tk.Label(root, text="Role:").pack()
+tk.Radiobutton(root, text="Student", variable=var_role, value="student").pack()
+tk.Radiobutton(root, text="Staff", variable=var_role, value="staff").pack()
+tk.Radiobutton(root, text="Admin", variable=var_role, value="admin").pack()
+
+tk.Button(root, text="Register", command=register).pack()
+tk.Button(root, text="Login", command=login).pack()
+
+root.mainloop()
