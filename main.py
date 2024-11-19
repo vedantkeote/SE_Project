@@ -1,7 +1,8 @@
 import sys
 import sqlite3
 from PyQt6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QLineEdit, QPushButton, QLabel, QMessageBox, QComboBox, QListWidget
+    QApplication, QWidget, QVBoxLayout, QLineEdit, QPushButton, QLabel, QMessageBox,
+    QComboBox, QListWidget, QHBoxLayout
 )
 
 class OutpassManagementSystem(QWidget):
@@ -11,7 +12,7 @@ class OutpassManagementSystem(QWidget):
         self.cursor = self.conn.cursor()
         
         self.setWindowTitle("Outpass Management System")
-        self.setGeometry(100, 100, 400, 500)
+        self.setGeometry(100, 100, 500, 600)
         
         self.layout = QVBoxLayout()
         self.setLayout(self.layout)
@@ -19,6 +20,10 @@ class OutpassManagementSystem(QWidget):
         self.initUI()
 
     def initUI(self):
+        """Initialize the login interface."""
+        self.clear_layout()  # Ensure the previous layout is cleared
+
+        # UI for Login
         self.layout.addWidget(QLabel("User ID:"))
         self.user_id_input = QLineEdit()
         self.layout.addWidget(self.user_id_input)
@@ -40,19 +45,28 @@ class OutpassManagementSystem(QWidget):
         self.role_selector.addItems(["student", "staff", "admin"])
         self.layout.addWidget(self.role_selector)
 
-    def handle_login(self):
-        user_id = self.user_id_input.text()
-        password = self.password_input.text()
-        role = self.role_selector.currentText()
+    def logout(self):
+        """Logout the user and return to the login interface."""
+        self.clear_layout()  # Ensure the previous layout is cleared
+        self.initUI()
 
-        self.cursor.execute("SELECT * FROM users WHERE user_id=? AND password=? AND role=?", (user_id, password, role))
+    def handle_login(self):
+        user_id = self.user_id_input.text().strip()
+        password = self.password_input.text().strip()
+        role = self.role_selector.currentText().strip().lower()
+
+        self.cursor.execute("SELECT * FROM users WHERE user_id=? AND password=?", (user_id, password))
         user = self.cursor.fetchone()
 
         if user:
-            QMessageBox.information(self, "Login Success", f"Welcome {user[1]}!")
-            self.show_dashboard(role, user)
+            db_role = user[4].strip().lower()
+            if db_role == role:
+                QMessageBox.information(self, "Login Success", f"Welcome {user[1]} ({role})!")
+                self.show_dashboard(db_role, user)
+            else:
+                QMessageBox.warning(self, "Login Failed", f"Incorrect role selected. You are registered as '{db_role}'.")
         else:
-            QMessageBox.warning(self, "Login Failed", "Invalid credentials.")
+            QMessageBox.warning(self, "Login Failed", "Invalid User ID or Password.")
 
     def show_registration(self):
         self.clear_layout()
@@ -88,15 +102,11 @@ class OutpassManagementSystem(QWidget):
         self.layout.addWidget(back_button)
 
     def register_user(self):
-        user_id = self.register_user_id.text()
-        name = self.register_name.text()
-        email = self.register_email.text()
-        password = self.register_password.text()
-        role = self.register_role.currentText()
-
-        if not user_id or not name or not email or not password:
-            QMessageBox.warning(self, "Registration Error", "All fields are required.")
-            return
+        user_id = self.register_user_id.text().strip()
+        name = self.register_name.text().strip()
+        email = self.register_email.text().strip()
+        password = self.register_password.text().strip()
+        role = self.register_role.currentText().strip()
 
         self.cursor.execute("INSERT INTO users (user_id, name, email, password, role) VALUES (?, ?, ?, ?, ?)",
                             (user_id, name, email, password, role))
@@ -111,43 +121,73 @@ class OutpassManagementSystem(QWidget):
         elif role == "staff":
             self.show_staff_dashboard()
         elif role == "admin":
-            QMessageBox.information(self, "Admin", "Admin Dashboard coming soon!")
+            self.show_admin_dashboard()
+
+        logout_button = QPushButton("Logout")
+        logout_button.clicked.connect(self.initUI)
+        self.layout.addWidget(logout_button)
+
+    def load_notifications(self, student_id):
+        """Load and display notifications for the student."""
+        self.notifications_list.clear()  # Clear the current list
+
+        # Fetch notifications from the database for the given student ID
+        self.cursor.execute("SELECT message FROM notifications WHERE student_id=?", (student_id,))
+        notifications = self.cursor.fetchall()
+
+        if not notifications:
+            self.notifications_list.addItem("No new notifications.")
+        else:
+            for notification in notifications:
+                self.notifications_list.addItem(notification[0])
 
     def show_student_dashboard(self, user):
         self.layout.addWidget(QLabel(f"Welcome, {user[1]}"))
-        self.date_input = QLineEdit(self)
-        self.date_input.setPlaceholderText("Date (YYYY-MM-DD)")
-        self.layout.addWidget(self.date_input)
-
-        self.time_input = QLineEdit(self)
-        self.time_input.setPlaceholderText("Time (HH:MM)")
-        self.layout.addWidget(self.time_input)
-
-        self.reason_input = QLineEdit(self)
-        self.reason_input.setPlaceholderText("Reason")
-        self.layout.addWidget(self.reason_input)
-
-        submit_button = QPushButton("Submit Outpass Request")
-        submit_button.clicked.connect(lambda: self.submit_outpass_request(user[0]))
-        self.layout.addWidget(submit_button)
+        self.layout.addWidget(QLabel("Notifications Panel"))
+        self.notifications_list = QListWidget(self)
+        self.layout.addWidget(self.notifications_list)
+        self.load_notifications(user[0])
 
     def show_staff_dashboard(self):
-        self.layout.addWidget(QLabel("Review Outpasses"))
+        self.layout.addWidget(QLabel("Review Pending Outpasses"))
         self.outpass_list = QListWidget(self)
         self.layout.addWidget(self.outpass_list)
+        self.load_pending_outpasses()
 
-        self.cursor.execute("SELECT * FROM outpasses WHERE status='pending'")
-        for row in self.cursor.fetchall():
-            self.outpass_list.addItem(f"ID: {row[0]}, Student: {row[1]}, Date: {row[2]}, Reason: {row[4]}")
+        approve_button = QPushButton("Approve")
+        approve_button.clicked.connect(lambda: self.update_outpass_status("approved"))
+        self.layout.addWidget(approve_button)
 
-    def submit_outpass_request(self, student_id):
-        date = self.date_input.text()
-        time = self.time_input.text()
-        reason = self.reason_input.text()
-        self.cursor.execute("INSERT INTO outpasses (student_id, date, time, reason) VALUES (?, ?, ?, ?)",
-                            (student_id, date, time, reason))
-        self.conn.commit()
-        QMessageBox.information(self, "Success", "Outpass request submitted.")
+        reject_button = QPushButton("Reject")
+        reject_button.clicked.connect(lambda: self.update_outpass_status("rejected"))
+        self.layout.addWidget(reject_button)
+
+    def show_admin_dashboard(self):
+        self.layout.addWidget(QLabel("Admin Dashboard"))
+        
+        view_users_button = QPushButton("View All Users")
+        view_users_button.clicked.connect(self.view_all_users)
+        self.layout.addWidget(view_users_button)
+        
+        view_outpasses_button = QPushButton("View All Outpasses")
+        view_outpasses_button.clicked.connect(self.view_all_outpasses)
+        self.layout.addWidget(view_outpasses_button)
+
+    def view_all_users(self):
+        self.layout.addWidget(QLabel("All Registered Users"))
+        users_list = QListWidget(self)
+        self.layout.addWidget(users_list)
+        self.cursor.execute("SELECT user_id, name, role FROM users")
+        for user in self.cursor.fetchall():
+            users_list.addItem(f"ID: {user[0]}, Name: {user[1]}, Role: {user[2]}")
+
+    def view_all_outpasses(self):
+        self.layout.addWidget(QLabel("All Outpasses"))
+        outpasses_list = QListWidget(self)
+        self.layout.addWidget(outpasses_list)
+        self.cursor.execute("SELECT * FROM outpasses")
+        for outpass in self.cursor.fetchall():
+            outpasses_list.addItem(f"ID: {outpass[0]}, Student: {outpass[1]}, Status: {outpass[5]}")
 
     def clear_layout(self):
         for i in reversed(range(self.layout.count())):
